@@ -50,8 +50,14 @@ System::Void kursarkanoid::formGame::movesBall(int speed)
         pic_ball->Top += moves_y;
     }*/
     //  Wykrycie kolizji z platform¹
+    if (Collision(pic_platform))
+    {
+        moves_y = -speed + rng->Next(rngMin, rngMax);
+        pic_ball->Top += moves_y;
+        PlaySound("wav/paletka.wav");
+    }
     //  Je¿eli znajdujemy siê nad platform¹
-    if ((pic_ball->Left >= pic_platform->Left) && (pic_ball->Left - pic_ball->Width <= pic_platform->Left + pic_platform->Width))
+    /*if ((pic_ball->Left >= pic_platform->Left) && (pic_ball->Left - pic_ball->Width <= pic_platform->Left + pic_platform->Width))
     {
         //  Je¿eli wysokoœæ pi³ki jest poni¿ej platformy
         if (pic_ball->Top >= pic_platform->Top - pic_ball->Height)
@@ -59,7 +65,7 @@ System::Void kursarkanoid::formGame::movesBall(int speed)
             moves_y = -speed + rng->Next(rngMin, rngMax);
             pic_ball->Top += moves_y;
         }
-    }
+    }*/
 
     //  Sprawdzenie kolizcji z doln¹ krawêdzi¹
     if ((pic_ball->Top >= pic_platform->Top + 5) && (status == 'G'))
@@ -90,21 +96,13 @@ System::Void kursarkanoid::formGame::movesBall(int speed)
     //  Sprawdzenie kolizji z ceg³a
     for each (Control^ var in Controls)
     {
-        if ((var->Tag == "red") && (var->Visible == true))
+        //  JE¯ELI obiekt jest ceg³¹ ORAZ jest kolizyjny z pi³eczk¹
+        if (IsBrick(var) && Collision(var) && var->Visible)
         {
-            if ((pic_ball->Left >= var->Left) && (pic_ball->Left - pic_ball->Width <= var->Left + var->Width))
-            {
-                if ((pic_ball->Top <= var->Top + var->Height) && pic_ball->Top >= var->Top)
-                {
-                    var->Visible = false;
-                    speedBall += 5;
-                    moves_y = -moves_y;
-                    pic_ball->Top += moves_y;
-                    score += 10;
-                    lbl_score->Text = Convert::ToString(score);
-                }
-            }
+            BrickCollisionAction(var);
+            PlaySound("wav/zbicie.wav");
         }
+        //  Sprawdzenie czy obiekt jest ceg³¹
     }
 
 
@@ -144,6 +142,28 @@ System::Void kursarkanoid::formGame::movesPlatform(char key, int speed)
     if (pic_platform->Left >= (this->Width - pic_platform->Width)) pic_platform->Left = (this->Width - pic_platform->Width);
 }
 /// <summary>
+/// Funkcja zwraca kolizjê obiektu z pi³k¹
+/// </summary>
+/// <param name="var"></param>
+/// <returns></returns>
+System::Boolean kursarkanoid::formGame::Collision(Control^ var)
+{
+    bool result = false;
+    
+    //  Sprawdzenie czy pi³ka pokrywa siê w osi X z obiektem
+    if (((pic_ball->Left + pic_ball->Width) >= (var->Left))
+        && ((pic_ball)->Left <= (var->Left + var->Width)))
+    {
+        //  Sprawdzenie czy pi³ka pokrywa siê w osi Y z obiektem
+        if (((pic_ball->Top + pic_ball->Height) >= (var->Top )) 
+            && ((pic_ball->Top) <= (var->Top+var->Height)))
+        {
+            result = true;
+        }
+    }
+    return result;
+}
+/// <summary>
 /// 
 /// </summary>
 /// <returns></returns>
@@ -170,11 +190,14 @@ System::Void kursarkanoid::formGame::newGame()
     score = 0;
     lbl_life->Text = Convert::ToString(life);
     lbl_score->Text = Convert::ToString(score);
+    brickCnt = 0;
     //  Zerowanie prêdkoœci
     speedBall = 10;
     speedPlatform = 20;
     //  Ustawienie pozycji poczatkowej
     InitPosition();
+    //  Losowanie cegielek
+    BrickGenerate();
     //  Nowy status do automatu
     status = 'N';
 }
@@ -184,8 +207,8 @@ System::Void kursarkanoid::formGame::newGame()
 /// <returns></returns>
 System::Void kursarkanoid::formGame::newTour()
 {
-    //speedBall += 5;
-    speedPlatform--;
+    speedBall = 10;
+    speedPlatform = 20;
     InitPosition();
     status = 'R';
 }
@@ -201,6 +224,209 @@ System::Void kursarkanoid::formGame::EndGame()
     btn_again->Visible = true;
     lbl_life->Text = ":/";
     status = 'E';
+    PlaySound("wav/smiech.wav");
+}
+/// <summary>
+/// 
+/// </summary>
+/// <returns></returns>
+System::Void kursarkanoid::formGame::BrickGenerate()
+{
+    Random^ rng = gcnew Random;
+    int imagesNumber = 0;
+    for each (Control^ var in Controls)
+    {
+        if ((var->Tag == "brick") || (var->Tag == "brick_metal") || (var->Tag == "brick_metalCrack") 
+            || (var->Tag == "brick_red") || (var->Tag == "brick_yellow") || (var->Tag == "brick_blue") 
+            || (var->Tag == "brick_green"))
+        {
+            imagesNumber = rng->Next(1, 6);
+            PictureBox^ brick = (PictureBox^)var;
+            brick->Image = gfx_brick->Images[imagesNumber];
+            switch (imagesNumber)
+            {
+            case 0:
+                brick->Tag = "brick_metalCrack";
+                break;
+            case 1:
+                brick->Tag = "brick_metal";
+                break;
+            case 2:
+                brick->Tag = "brick_red";
+                break;
+            case 3:
+                brick->Tag = "brick_yellow";
+                break;
+            case 4:
+                brick->Tag = "brick_blue";
+                break;
+            case 5:
+                brick->Tag = "brick_green";
+                break;
+            default:
+                break;
+            }
+
+            
+            brick->Visible = true;
+        }
+    }
+}
+/// <summary>
+/// 
+/// </summary>
+/// <param name="brick"></param>
+/// <returns></returns>
+System::Void kursarkanoid::formGame::BrickCollisionAction(Control^ brick)
+{
+    //  Zmienne
+    PictureBox^ brickPic = (PictureBox^)brick;
+
+    if (brickPic->Tag == "brick_metalCrack")   //  metal rozbity
+    {
+        brickPic->Visible = false;
+        score += 20;
+        brickCnt++;
+    }
+    else if (brickPic->Tag == "brick_metal") //  metalowy
+    {
+        brickPic->Image = gfx_brick->Images[0];
+        brickPic->Tag = "brick_metalCrack";
+        PlaySound("wav/kruszenie.wav");
+    }
+    else if (brickPic->Tag == "brick_red") //  czerwony
+    {
+        brickPic->Visible = false;
+        speedBall += 10;
+        score += 10;
+        brickCnt++;
+    }
+    else if (brickPic->Tag == "brick_yellow")   //  ¿ó³ty
+    {
+        brickPic->Visible = false;
+        speedPlatform -= 5;
+        score += 10;
+        brickCnt++;
+    }
+    else if (brickPic->Tag == "brick_blue")   //  niebieski
+    {
+        brickPic->Visible = false;
+        speedBall -= 5;
+        score += 10;
+        brickCnt++;
+    }
+    else if (brickPic->Tag == "brick_green")   //  zielony
+    {
+        brickPic->Visible = false;
+        speedPlatform = 20;
+        speedBall = 10;
+        score += 10;
+        brickCnt++;
+    }
+
+    if (speedBall < 10) speedBall = 10;
+    if (speedPlatform < 2) speedBall = 2;
+
+    moves_y = -moves_y;
+    pic_ball->Top += moves_y;
+    lbl_score->Text = Convert::ToString(score);
+
+    if (brickCnt >= 40)
+    {
+        newGame();
+        MessageBox::Show("Ty byku!", "Yupi!", MessageBoxButtons::OK, MessageBoxIcon::Information);
+        PlaySound("wav/wygrana.wav");
+    }
+
+
+
+}
+/// <summary>
+/// 
+/// </summary>
+/// <param name="brick"></param>
+/// <returns></returns>
+System::Char kursarkanoid::formGame::BrickCollisionDir(Control^ brick)
+{
+    char dir = '?';
+    if ((IsBrick(brick)) && (brick->Visible == true))
+    {
+        //  Sprawdzenie czy pi³ka pokrywa siê w osi X z ceg³¹
+        if (((pic_ball->Left + pic_ball->Width) >= (brick->Left))
+            && ((pic_ball)->Left <= (brick->Left + brick->Width)))
+        {
+            //  Sprawdzenie czy pi³ka pokrywa siê w osi Y z ceg³¹
+
+            if ((pic_ball->Top <= brick->Top + brick->Height) && pic_ball->Top >= brick->Top)
+            {
+                //  Odleg³oœæ od zachodniej œcianki mniejsza ni¿ 5
+                if (Math::Abs(pic_ball->Left - brick->Left) <= 5) dir = 'W';
+                if (Math::Abs(pic_ball->Left - (brick->Left + brick->Width)) <= 5) dir = 'E';
+                //  Odbicie od górnej krawêdzi
+                if (Math::Abs(pic_ball->Top - (brick->Top) <= 5)) dir = 'N';
+                //  Odbicie od dolnej krawêdzi
+                if (Math::Abs(pic_ball->Top - (brick->Top+ + brick->Height) <= 5)) dir = 'S';
+            }
+        }
+    }
+    return dir;
+}
+/// <summary>
+/// 
+/// </summary>
+/// <returns></returns>
+System::Void kursarkanoid::formGame::Brick()
+{
+    return System::Void();
+}
+/// <summary>
+/// 
+/// </summary>
+/// <param name="var"></param>
+/// <returns></returns>
+System::Boolean kursarkanoid::formGame::IsBrick(Control^ var)
+{
+    try
+    {
+        //  Próba przypisania typu PictureBox
+        PictureBox^ pic = (PictureBox^)var;
+        if ((pic->Tag == "brick") || (pic->Tag == "brick_metal") || (pic->Tag == "brick_metalCrack")
+            || (pic->Tag == "brick_red") || (pic->Tag == "brick_yellow") || (pic->Tag == "brick_blue")
+            || (pic->Tag == "brick_green"))
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+            
+    }
+    catch (...)
+    {
+        return false;
+    }
+
+}
+/// <summary>
+/// 
+/// </summary>
+/// <param name="var"></param>
+/// <returns></returns>
+System::Void kursarkanoid::formGame::PlaySound(String^ var)
+{
+    try 
+    {
+        System::Media::SoundPlayer^ player = gcnew System::Media::SoundPlayer();
+        player->SoundLocation = var;
+        player->Load();
+        player->Play();
+    }
+    catch (...)
+    {
+        MessageBox::Show("Kurza tfasz!", "Error handler MS office error on Linux\n Exception of Exception[]", MessageBoxButtons::AbortRetryIgnore, MessageBoxIcon::Error);
+    }
+    
 }
 /// <summary>
 /// 
